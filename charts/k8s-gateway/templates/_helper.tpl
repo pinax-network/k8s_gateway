@@ -85,3 +85,12 @@ Create the matchable regex from domain
     {{ "unset" }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Check DNS challenge configuration to ensure only one of k8s_gateway or externalDNS is enabled.
+*/}}
+{{- define "validate-dnsChallenge" -}}
+  {{- if and .Values.dnsChallenge.k8s_gateway.enabled .Values.dnsChallenge.externalDNS.enabled }}
+    {{- fail "Both 'k8s_gateway' and 'externalDNS' are enabled. Only one DNS challenge option can be enabled." }}
+  {{- end }}
+{{- end }}

@@ -10,6 +10,7 @@ watchedResources:
   - GRPCRoute
   - Ingress
   - Service
+  - Challenge
 # Delegated domain
 domain: "foo.org"
 
@@ -22,6 +23,21 @@ service:
   # externalTrafficPolicy: Local
   # externalIPs:
   #  - 192.168.1.3
+
+extraZonePlugins:
+  - name: log
+  - name: errors
+  # Serves a /health endpoint on :8080, required for livenessProbe
+  - name: health
+    configBlock: |-
+      lameduck 5s
+  # Serves a /ready endpoint on :8181, required for readinessProbe
+  - name: ready
+  - name: forward
+    parameters: . 1.1.1.1 8.8.8.8
+  - name: loop
+  - name: reload
+  - name: loadbalance
 
 debug:
   enabled: true

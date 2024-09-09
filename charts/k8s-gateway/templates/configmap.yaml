@@ -8,15 +8,16 @@ metadata:
     {{ toYaml .Values.customLabels | trim | nindent 4 }}
     {{- end }}
 data:
+  {{- include "validate-dnsChallenge" . }}
   Corefile: |-
     .:1053 {
         {{- if .Values.debug.enabled }}
         debug
         {{- end }}
-        {{- if .Values.dnsChallenge.enabled }}
+        {{- if .Values.dnsChallenge.externalDNS.enabled }}
         template IN ANY {{ required "Delegated domain ('domain') is mandatory " .Values.domain }} {
            match "_acme-challenge[.](.*)[.]{{ include "k8s-gateway.regex" . }}"
-           answer "{{ "{{" }} .Name {{ "}}" }} 5 IN CNAME {{ "{{" }}  index .Match 1 {{ "}}" }}.{{ required "DNS01 challenge domain is mandatory " .Values.dnsChallenge.domain }}"
+           answer "{{ "{{" }} .Name {{ "}}" }} 5 IN CNAME {{ "{{" }}  index .Match 1 {{ "}}" }}.{{ required "DNS01 challenge domain is mandatory " .Values.dnsChallenge.externalDNS.domain }}"
            fallthrough
         }
         {{- end }}
@@ -27,7 +28,7 @@ data:
           secondary {{ .Values.secondary }}
           {{- end }}
           {{- if .Values.watchedResources }}
-          resources {{ join " " .Values.watchedResources }}
+          resources {{ join " " .Values.watchedResources }}{{ if .Values.dnsChallenge.k8s_gateway.enabled }} Challenge{{ end }}
           {{- end }}
           {{- if .Values.fallthrough.enabled }}
           fallthrough {{- range .Values.fallthrough.zones }} {{ . }} {{- end }}

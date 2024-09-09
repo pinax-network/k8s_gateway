@@ -2,6 +2,19 @@ apiVersion: v1
 entries:
   k8s-gateway:
   - apiVersion: v2
+    appVersion: 0.5.0
+    created: "2024-09-12T13:55:56.756599735-04:00"
+    description: A fork of the k8s_gateway CoreDNS plugin to allow TXT records
+    digest: b1c96094c80591918359f8c4e5b2464b31fe51060f22874fa6e84efa843b8328
+    maintainers:
+    - email: guillaume@pinax.network
+      name: Guillaume
+    name: k8s-gateway
+    type: application
+    urls:
+    - https://ori-edge.github.io/k8s_gateway/charts/k8s-gateway-3.0.0.tgz
+    version: 3.0.0
+  - apiVersion: v2
     appVersion: 0.4.0
     created: "2024-03-11T04:58:30.652007902Z"
     description: A Helm chart for the k8s_gateway CoreDNS plugin
@@ -469,4 +482,4 @@ entries:
     urls:
     - https://ori-edge.github.io/k8s_gateway/charts/k8s-gateway-1.0.0.tgz
     version: 1.0.0
-generated: "2024-03-11T04:58:30.651388335Z"
+generated: "2024-09-12T13:55:56.755838028-04:00"
