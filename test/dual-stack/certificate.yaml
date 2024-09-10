@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: myservicea-cert
+  namespace: default
+spec:
+  secretName: my-service-cert-secret
+  issuerRef:
+    name: letsencrypt-dns-01 # ClusterIssuer or Issuer name
+    kind: ClusterIssuer # Or Issuer, depending on your configuration
+  dnsNames:
+    - myservicea.foo.org
