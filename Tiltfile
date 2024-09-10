@@ -30,6 +30,20 @@ helm_remote('cilium',
             repo_url='https://helm.cilium.io')
 k8s_yaml('./test/cilium/dual-stack/crd-values.yaml')
 
+# Cert-manager
+helm_remote('cert-manager',
+            version="v1.15.3",
+            namespace="kube-system",
+            repo_name='jetstack',
+            set=['crds.enabled=true'],
+            repo_url='https://charts.jetstack.io')
+k8s_yaml('./test/cert-manager/clusterIssuer.yaml')
+
+helm_remote('cert-manager-webhook-pinax',
+            version="0.1.0",
+            namespace="kube-system",
+            repo_name='oci://ghcr.io/pinax-network/charts',
+            set=['certManager.namespace=kube-system'])
 
 # CoreDNS with updated RBAC
 k8s_yaml(helm(
@@ -82,3 +96,4 @@ k8s_yaml('./test/gateway-api/resources.yml')
 k8s_yaml('./test/gatewayclasses.yaml')
 k8s_yaml('./test/dual-stack/service-annotation.yml')
 k8s_yaml('./test/dual-stack/ingress-services.yml')
+k8s_yaml('./test/dual-stack/certificate.yaml')
