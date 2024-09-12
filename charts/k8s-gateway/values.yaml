@@ -1,7 +1,7 @@
 image:
-  registry: quay.io
-  repository: oriedge/k8s_gateway
-  tag: v0.4.0
+  registry: ghcr.io
+  repository: pinax-network/k8s_gateway
+  tag: v0.5.0
   pullPolicy: IfNotPresent
 
 # Delegated domain
@@ -30,12 +30,21 @@ fallthrough:
 # Override the default `serviceName.namespace` domain apex
 apex: ""
 
-# Optional configuration option for DNS01 challenge that will redirect all acme
-# challenge requests to external cloud domain (e.g. managed by cert-manager)
+# Optional configuration option for DNS01 challenge
+# When enabling dnsChallenge, one of k8s_gateway or externalDNS must be provided.
+#
+# `k8s_gateway` will listen for cert-manager Challenge's CRDs in order to create the TXT records
+# dynamically from in CoreDNS itself.
+#
+# `externalDNS` will redirect all acme challenge requests to external cloud
+# domain (e.g. managed by cert-manager)
 # See: https://cert-manager.io/docs/configuration/acme/dns01/
 dnsChallenge:
-  enabled: false
-  domain: dns01.clouddns.com
+  k8s_gateway:
+    enabled: false
+  externalDNS:
+    enabled: false
+    domain: dns01.clouddns.com
 
 # Optional plugins that will be enabled in the zone, e.g. "forward . /etc/resolve.conf"
 extraZonePlugins:
