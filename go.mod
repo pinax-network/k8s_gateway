@@ -1,8 +1,6 @@
-module github.com/ori-edge/k8s_gateway
+module github.com/pinax-network/k8s_gateway
 
 go 1.22.0
-
-toolchain go1.22.5
 
 require (
 	github.com/cert-manager/cert-manager v1.15.3

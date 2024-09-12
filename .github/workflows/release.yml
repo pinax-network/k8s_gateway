@@ -3,53 +3,96 @@ name: release
 on:
   push:
     tags:
-      - '*'
+      - "*"
 
 jobs:
   go-release:
     runs-on: ubuntu-latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      -
-        name: Set up Go
+      - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.21
-      -
-        name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v2
+          go-version: 1.22
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --rm-dist
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   docker-release:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
+
       - name: Setup Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.21.x
-      - 
-        name: Set up Docker Buildx
+          go-version: 1.22.x
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      - 
-        name: Login to Container Registry
-        uses: docker/login-action@v1
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
         with:
-          registry: quay.io
-          username: ${{ secrets.DOCKER_LOGIN }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      - 
-        name: Build and Push container images
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push container images
         run: |
           make release
+
+  helm-oci-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    outputs:
+      chart-digest: ${{ steps.helm_publish.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Extract the version from Chart.yaml
+      - name: Extract chart version
+        uses: mikefarah/yq@v4
+        id: chart_version
+        with:
+          cmd: |
+            VERSION=$(yq '.version' charts/k8s-gateway/Chart.yaml)
+            echo "version=$(echo $VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Extract appVersion
+        id: app_version
+        run: echo "appVersion=$(echo ${GITHUB_REF##*/})" >> $GITHUB_OUTPUT
+
+      - name: Helm | Publish
+        id: helm_publish
+        uses: peak-scale/github-actions/helm-oci-chart@38322faabccd75abfa581c435e367d446b6d2c3b # v0.1.0
+        with:
+          registry: ghcr.io
+          repository: ${{ github.repository_owner }}/charts
+          name: "k8s-gateway"
+          version: ${{ steps.chart_version.outputs.version }}
+          app-version: ${{ steps.app_version.outputs.appVersion }}
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ secrets.GITHUB_TOKEN }}
+          update-dependencies: "true" # Defaults to false
+

@@ -14,19 +14,54 @@ import (
 
 func setupEmptyLookupFuncs() {
 	if resource := lookupResource("HTTPRoute"); resource != nil {
-		resource.lookup = func(_ []string) []netip.Addr { return []netip.Addr{} }
+		resource.lookup = func(_ []string) []interface{} {
+			addrs := []netip.Addr{}
+			result := make([]interface{}, len(addrs))
+			for i, addr := range addrs {
+				result[i] = addr
+			}
+			return result
+		}
 	}
 	if resource := lookupResource("TLSRoute"); resource != nil {
-		resource.lookup = func(_ []string) []netip.Addr { return []netip.Addr{} }
+		resource.lookup = func(_ []string) []interface{} {
+			addrs := []netip.Addr{}
+			result := make([]interface{}, len(addrs))
+			for i, addr := range addrs {
+				result[i] = addr
+			}
+			return result
+		}
 	}
 	if resource := lookupResource("GRPCRoute"); resource != nil {
-		resource.lookup = func(_ []string) []netip.Addr { return []netip.Addr{} }
+		resource.lookup = func(_ []string) []interface{} {
+			addrs := []netip.Addr{}
+			result := make([]interface{}, len(addrs))
+			for i, addr := range addrs {
+				result[i] = addr
+			}
+			return result
+		}
 	}
 	if resource := lookupResource("Ingress"); resource != nil {
-		resource.lookup = func(_ []string) []netip.Addr { return []netip.Addr{} }
+		resource.lookup = func(_ []string) []interface{} {
+			addrs := []netip.Addr{}
+			result := make([]interface{}, len(addrs))
+			for i, addr := range addrs {
+				result[i] = addr
+			}
+			return result
+		}
 	}
 	if resource := lookupResource("Service"); resource != nil {
-		resource.lookup = func(_ []string) []netip.Addr { return []netip.Addr{} }
+		resource.lookup = func(_ []string) []interface{} {
+			addrs := []netip.Addr{}
+			result := make([]interface{}, len(addrs))
+			for i, addr := range addrs {
+				result[i] = addr
+			}
+			return result
+		}
 	}
 }
 
@@ -69,7 +104,9 @@ var testsDualNS = []test.Case{
 		Qname: "example.com.", Qtype: dns.TypeSOA,
 		Rcode: dns.RcodeSuccess,
 		Answer: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
@@ -88,42 +125,54 @@ var testsDualNS = []test.Case{
 		Qname: "example.com.", Qtype: dns.TypeSRV,
 		Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
 		Qname: "example.com.", Qtype: dns.TypeA,
 		Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
 		Qname: "dns1.kube-system.example.com.", Qtype: dns.TypeSRV,
 		Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
 		Qname: "dns1.kube-system.example.com.", Qtype: dns.TypeNS,
 		Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
 		Qname: "dns1.kube-system.example.com.", Qtype: dns.TypeSOA,
 		Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
 		Qname: "dns1.kube-system.example.com.", Qtype: dns.TypeAAAA,
 		Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	{
@@ -137,7 +186,9 @@ var testsDualNS = []test.Case{
 		Qname: "foo.dns1.kube-system.example.com.", Qtype: dns.TypeA,
 		Rcode: dns.RcodeNameError,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 }
