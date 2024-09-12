@@ -25,6 +25,9 @@ import (
 	gatewayapi_v1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayClient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
+
+	cm_v1 "github.com/cert-manager/cert-manager/pkg/apis/acme/v1"
+	k8s_cm "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned"
 )
 
 const (
@@ -35,6 +38,7 @@ const (
 	httpRouteHostnameIndex           = "httpRouteHostname"
 	tlsRouteHostnameIndex            = "tlsRouteHostname"
 	grpcRouteHostnameIndex           = "grpcRouteHostname"
+	challengeHostnameIndex           = "challengeHostname"
 	virtualServerHostnameIndex       = "virtualServerHostname"
 	hostnameAnnotationKey            = "coredns.io/hostname"
 	externalDnsHostnameAnnotationKey = "external-dns.alpha.kubernetes.io/hostname"
@@ -45,17 +49,25 @@ type KubeController struct {
 	client      kubernetes.Interface
 	nginxClient k8s_nginx.Interface
 	gwClient    gatewayClient.Interface
+	cmClient    k8s_cm.Interface
 	controllers []cache.SharedIndexInformer
 	hasSynced   bool
 }
 
-func newKubeController(ctx context.Context, c *kubernetes.Clientset, gw *gatewayClient.Clientset, nc *k8s_nginx.Clientset) *KubeController {
+func newKubeController(
+	ctx context.Context,
+	c *kubernetes.Clientset,
+	gw *gatewayClient.Clientset,
+	nc *k8s_nginx.Clientset,
+	cm *k8s_cm.Clientset,
+) *KubeController {
 	log.Infof("Building k8s_gateway controller")
 
 	ctrl := &KubeController{
 		client:      c,
 		nginxClient: nc,
 		gwClient:    gw,
+		cmClient:    cm,
 	}
 
 	if existGatewayCRDs(ctx, gw) {
@@ -157,6 +169,22 @@ func newKubeController(ctx context.Context, c *kubernetes.Clientset, gw *gateway
 		ctrl.controllers = append(ctrl.controllers, serviceController)
 	}
 
+	if existChallengeCRDs(ctx, cm) {
+		if resource := lookupResource("Challenge"); resource != nil {
+			challengeController := cache.NewSharedIndexInformer(
+				&cache.ListWatch{
+					ListFunc:  challengeLister(ctx, ctrl.cmClient, core.NamespaceAll),
+					WatchFunc: challengeWatcher(ctx, ctrl.cmClient, core.NamespaceAll),
+				},
+				&cm_v1.Challenge{},
+				defaultResyncPeriod,
+				cache.Indexers{challengeHostnameIndex: challengeHostnameIndexFunc},
+			)
+			resource.lookup = lookupChallengeIndex(challengeController)
+			ctrl.controllers = append(ctrl.controllers, challengeController)
+		}
+	}
+
 	return ctrl
 }
 
@@ -209,11 +237,15 @@ func (gw *Gateway) RunKubeController(ctx context.Context) error {
 		return err
 	}
 
-	gw.Controller = newKubeController(ctx, kubeClient, gwAPIClient, nginxClient)
+	cmClient, err := k8s_cm.NewForConfig(config)
+	if err != nil {
+		return err
+	}
+
+	gw.Controller = newKubeController(ctx, kubeClient, gwAPIClient, nginxClient, cmClient)
 	go gw.Controller.run()
 
 	return nil
-
 }
 
 func existGatewayCRDs(ctx context.Context, c *gatewayClient.Clientset) bool {
@@ -226,13 +258,22 @@ func existVirtualServerCRDs(ctx context.Context, c *k8s_nginx.Clientset) bool {
 	return handleCRDCheckError(err, "VirtualServer", "k8s.nginx.org/v1")
 }
 
+func existChallengeCRDs(ctx context.Context, c *k8s_cm.Clientset) bool {
+	_, err := c.AcmeV1().Challenges("").List(ctx, metav1.ListOptions{})
+	return handleCRDCheckError(err, "Challenge", "acme.cert-manager.io/v1")
+}
+
 func handleCRDCheckError(err error, resourceName string, apiGroup string) bool {
 	if meta.IsNoMatchError(err) || runtime.IsNotRegisteredError(err) || apierrors.IsNotFound(err) {
 		log.Infof("%s CRDs are not found. Not syncing %s resources.", resourceName, resourceName)
 		return false
 	}
 	if apierrors.IsForbidden(err) {
-		log.Infof("access to `%s` is forbidden, please check RBAC. Not syncing %s resources.", apiGroup, resourceName)
+		log.Infof(
+			"access to `%s` is forbidden, please check RBAC. Not syncing %s resources.",
+			apiGroup,
+			resourceName,
+		)
 		return false
 	}
 	if err != nil {
@@ -257,87 +298,163 @@ func (gw *Gateway) getClientConfig() (*rest.Config, error) {
 	return rest.InClusterConfig()
 }
 
-func httpRouteLister(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func httpRouteLister(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.GatewayV1().HTTPRoutes(ns).List(ctx, opts)
 	}
 }
 
-func tlsRouteLister(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func tlsRouteLister(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.GatewayV1alpha2().TLSRoutes(ns).List(ctx, opts)
 	}
 }
 
-func grpcRouteLister(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func grpcRouteLister(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.GatewayV1alpha2().GRPCRoutes(ns).List(ctx, opts)
 	}
 }
 
-func gatewayLister(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func gatewayLister(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.GatewayV1().Gateways(ns).List(ctx, opts)
 	}
 }
 
-func ingressLister(ctx context.Context, c kubernetes.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func ingressLister(
+	ctx context.Context,
+	c kubernetes.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.NetworkingV1().Ingresses(ns).List(ctx, opts)
 	}
 }
 
-func serviceLister(ctx context.Context, c kubernetes.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func serviceLister(
+	ctx context.Context,
+	c kubernetes.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.CoreV1().Services(ns).List(ctx, opts)
 	}
 }
 
-func virtualServerLister(ctx context.Context, c k8s_nginx.Interface, ns string) func(metav1.ListOptions) (runtime.Object, error) {
+func virtualServerLister(
+	ctx context.Context,
+	c k8s_nginx.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
 	return func(opts metav1.ListOptions) (runtime.Object, error) {
 		return c.K8sV1().VirtualServers(ns).List(ctx, opts)
 	}
 }
 
-func httpRouteWatcher(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func challengeLister(
+	ctx context.Context,
+	c k8s_cm.Interface,
+	ns string,
+) func(metav1.ListOptions) (runtime.Object, error) {
+	return func(opts metav1.ListOptions) (runtime.Object, error) {
+		return c.AcmeV1().Challenges(ns).List(ctx, opts)
+	}
+}
+
+func httpRouteWatcher(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.GatewayV1().HTTPRoutes(ns).Watch(ctx, opts)
 	}
 }
 
-func tlsRouteWatcher(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func tlsRouteWatcher(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.GatewayV1alpha2().TLSRoutes(ns).Watch(ctx, opts)
 	}
 }
 
-func grpcRouteWatcher(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func grpcRouteWatcher(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.GatewayV1alpha2().GRPCRoutes(ns).Watch(ctx, opts)
 	}
 }
 
-func gatewayWatcher(ctx context.Context, c gatewayClient.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func gatewayWatcher(
+	ctx context.Context,
+	c gatewayClient.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.GatewayV1().Gateways(ns).Watch(ctx, opts)
 	}
 }
 
-func ingressWatcher(ctx context.Context, c kubernetes.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func ingressWatcher(
+	ctx context.Context,
+	c kubernetes.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.NetworkingV1().Ingresses(ns).Watch(ctx, opts)
 	}
 }
 
-func serviceWatcher(ctx context.Context, c kubernetes.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func serviceWatcher(
+	ctx context.Context,
+	c kubernetes.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.CoreV1().Services(ns).Watch(ctx, opts)
 	}
 }
 
-func virtualServerWatcher(ctx context.Context, c k8s_nginx.Interface, ns string) func(metav1.ListOptions) (watch.Interface, error) {
+func virtualServerWatcher(
+	ctx context.Context,
+	c k8s_nginx.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
 	return func(opts metav1.ListOptions) (watch.Interface, error) {
 		return c.K8sV1().VirtualServers(ns).Watch(ctx, opts)
+	}
+}
+
+func challengeWatcher(
+	ctx context.Context,
+	c k8s_cm.Interface,
+	ns string,
+) func(metav1.ListOptions) (watch.Interface, error) {
+	return func(opts metav1.ListOptions) (watch.Interface, error) {
+		return c.AcmeV1().Challenges(ns).Watch(ctx, opts)
 	}
 }
 
@@ -428,6 +545,34 @@ func serviceHostnameIndexFunc(obj interface{}) ([]string, error) {
 	return []string{hostname}, nil
 }
 
+func challengeHostnameIndexFunc(obj interface{}) ([]string, error) {
+	challenge, ok := obj.(*cm_v1.Challenge)
+	if !ok {
+		return []string{}, nil
+	}
+
+	switch challenge.Status.State {
+	// Ignore a challenge's final states
+	case "errored", "expired", "invalid", "valid", "":
+		return []string{}, nil
+
+	default:
+	}
+
+	if challenge.Spec.Type == "HTTP-01" {
+		return []string{}, nil
+	}
+	host := "_acme-challenge." + challenge.Spec.DNSName
+
+	log.Debugf(
+		"Adding index %s for challenge %s",
+		host,
+		challenge.Name,
+	)
+
+	return []string{host}, nil
+}
+
 func checkServiceAnnotation(annotation string, service *core.Service) (string, bool) {
 	if annotationValue, exists := service.Annotations[annotation]; exists {
 		// checking the hostname length limits
@@ -457,8 +602,8 @@ func virtualServerHostnameIndexFunc(obj interface{}) ([]string, error) {
 	return []string{virtualServer.Spec.Host}, nil
 }
 
-func lookupServiceIndex(ctrl cache.SharedIndexInformer) func([]string) []netip.Addr {
-	return func(indexKeys []string) (result []netip.Addr) {
+func lookupServiceIndex(ctrl cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
 			obj, _ := ctrl.GetIndexer().ByIndex(serviceHostnameIndex, strings.ToLower(key))
@@ -476,14 +621,16 @@ func lookupServiceIndex(ctrl cache.SharedIndexInformer) func([]string) []netip.A
 				return
 			}
 
-			result = append(result, fetchServiceLoadBalancerIPs(service.Status.LoadBalancer.Ingress)...)
+			result = append(
+				result,
+				fetchServiceLoadBalancerIPs(service.Status.LoadBalancer.Ingress)...)
 		}
 		return
 	}
 }
 
-func lookupVirtualServerIndex(ctrl cache.SharedIndexInformer) func([]string) []netip.Addr {
-	return func(indexKeys []string) (result []netip.Addr) {
+func lookupVirtualServerIndex(ctrl cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
 			obj, _ := ctrl.GetIndexer().ByIndex(virtualServerHostnameIndex, strings.ToLower(key))
@@ -505,8 +652,8 @@ func lookupVirtualServerIndex(ctrl cache.SharedIndexInformer) func([]string) []n
 	}
 }
 
-func lookupHttpRouteIndex(http, gw cache.SharedIndexInformer) func([]string) []netip.Addr {
-	return func(indexKeys []string) (result []netip.Addr) {
+func lookupHttpRouteIndex(http, gw cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
 			obj, _ := http.GetIndexer().ByIndex(httpRouteHostnameIndex, strings.ToLower(key))
@@ -516,14 +663,16 @@ func lookupHttpRouteIndex(http, gw cache.SharedIndexInformer) func([]string) []n
 
 		for _, obj := range objs {
 			httpRoute, _ := obj.(*gatewayapi_v1.HTTPRoute)
-			result = append(result, lookupGateways(gw, httpRoute.Spec.ParentRefs, httpRoute.Namespace)...)
+			result = append(
+				result,
+				lookupGateways(gw, httpRoute.Spec.ParentRefs, httpRoute.Namespace)...)
 		}
 		return
 	}
 }
 
-func lookupTLSRouteIndex(tls, gw cache.SharedIndexInformer) func([]string) []netip.Addr {
-	return func(indexKeys []string) (result []netip.Addr) {
+func lookupTLSRouteIndex(tls, gw cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
 			obj, _ := tls.GetIndexer().ByIndex(tlsRouteHostnameIndex, strings.ToLower(key))
@@ -533,14 +682,16 @@ func lookupTLSRouteIndex(tls, gw cache.SharedIndexInformer) func([]string) []net
 
 		for _, obj := range objs {
 			tlsRoute, _ := obj.(*gatewayapi_v1alpha2.TLSRoute)
-			result = append(result, lookupGateways(gw, tlsRoute.Spec.ParentRefs, tlsRoute.Namespace)...)
+			result = append(
+				result,
+				lookupGateways(gw, tlsRoute.Spec.ParentRefs, tlsRoute.Namespace)...)
 		}
 		return
 	}
 }
 
-func lookupGRPCRouteIndex(grpc, gw cache.SharedIndexInformer) func([]string) []netip.Addr {
-	return func(indexKeys []string) (result []netip.Addr) {
+func lookupGRPCRouteIndex(grpc, gw cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
 			obj, _ := grpc.GetIndexer().ByIndex(grpcRouteHostnameIndex, strings.ToLower(key))
@@ -550,13 +701,19 @@ func lookupGRPCRouteIndex(grpc, gw cache.SharedIndexInformer) func([]string) []n
 
 		for _, obj := range objs {
 			grpcRoute, _ := obj.(*gatewayapi_v1alpha2.GRPCRoute)
-			result = append(result, lookupGateways(gw, grpcRoute.Spec.ParentRefs, grpcRoute.Namespace)...)
+			result = append(
+				result,
+				lookupGateways(gw, grpcRoute.Spec.ParentRefs, grpcRoute.Namespace)...)
 		}
 		return
 	}
 }
 
-func lookupGateways(gw cache.SharedIndexInformer, refs []gatewayapi_v1.ParentReference, ns string) (result []netip.Addr) {
+func lookupGateways(
+	gw cache.SharedIndexInformer,
+	refs []gatewayapi_v1.ParentReference,
+	ns string,
+) (result []interface{}) {
 	for _, gwRef := range refs {
 
 		if gwRef.Namespace != nil {
@@ -575,8 +732,8 @@ func lookupGateways(gw cache.SharedIndexInformer, refs []gatewayapi_v1.ParentRef
 	return
 }
 
-func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []netip.Addr {
-	return func(indexKeys []string) (result []netip.Addr) {
+func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
 			obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, strings.ToLower(key))
@@ -586,14 +743,35 @@ func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []netip.A
 		for _, obj := range objs {
 			ingress, _ := obj.(*networking.Ingress)
 
-			result = append(result, fetchIngressLoadBalancerIPs(ingress.Status.LoadBalancer.Ingress)...)
+			result = append(
+				result,
+				fetchIngressLoadBalancerIPs(ingress.Status.LoadBalancer.Ingress)...)
 		}
 
 		return
 	}
 }
 
-func fetchGatewayIPs(gw *gatewayapi_v1.Gateway) (results []netip.Addr) {
+func lookupChallengeIndex(ctrl cache.SharedIndexInformer) func([]string) []interface{} {
+	return func(indexKeys []string) (result []interface{}) {
+		var objs []interface{}
+		for _, key := range indexKeys {
+			obj, _ := ctrl.GetIndexer().ByIndex(challengeHostnameIndex, strings.ToLower(key))
+			objs = append(objs, obj...)
+		}
+		log.Debugf("Found %d matching Challenge objects", len(objs))
+
+		for _, obj := range objs {
+			challenge, _ := obj.(*cm_v1.Challenge)
+
+			result = append(result, challenge.Spec.Key)
+		}
+
+		return
+	}
+}
+
+func fetchGatewayIPs(gw *gatewayapi_v1.Gateway) (results []interface{}) {
 	for _, addr := range gw.Status.Addresses {
 		if *addr.Type == gatewayapi_v1.IPAddressType {
 			addr, err := netip.ParseAddr(addr.Value)
@@ -621,7 +799,7 @@ func fetchGatewayIPs(gw *gatewayapi_v1.Gateway) (results []netip.Addr) {
 	return
 }
 
-func fetchServiceLoadBalancerIPs(ingresses []core.LoadBalancerIngress) (results []netip.Addr) {
+func fetchServiceLoadBalancerIPs(ingresses []core.LoadBalancerIngress) (results []interface{}) {
 	for _, address := range ingresses {
 		if address.Hostname != "" {
 			log.Debugf("Looking up hostname %s", address.Hostname)
@@ -647,7 +825,9 @@ func fetchServiceLoadBalancerIPs(ingresses []core.LoadBalancerIngress) (results 
 	return
 }
 
-func fetchIngressLoadBalancerIPs(ingresses []networking.IngressLoadBalancerIngress) (results []netip.Addr) {
+func fetchIngressLoadBalancerIPs(
+	ingresses []networking.IngressLoadBalancerIngress,
+) (results []interface{}) {
 	for _, address := range ingresses {
 		if address.Hostname != "" {
 			log.Debugf("Looking up hostname %s", address.Hostname)
@@ -674,8 +854,10 @@ func fetchIngressLoadBalancerIPs(ingresses []networking.IngressLoadBalancerIngre
 }
 
 // the below is borrowed from k/k's github repo
-const dns1123ValueFmt string = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
-const dns1123SubdomainFmt string = dns1123ValueFmt + "(\\." + dns1123ValueFmt + ")*"
+const (
+	dns1123ValueFmt     string = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+	dns1123SubdomainFmt string = dns1123ValueFmt + "(\\." + dns1123ValueFmt + ")*"
+)
 
 var dns1123SubdomainRegexp = regexp.MustCompile("^" + dns1123SubdomainFmt + "$")
 
