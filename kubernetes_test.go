@@ -140,7 +140,9 @@ func addIngresses(client kubernetes.Interface) {
 func addVirtualServers(client k8s_nginx.Interface) {
 	ctx := context.TODO()
 	for _, virtualServer := range testVirtualServers {
-		_, err := client.K8sV1().VirtualServers("ns1").Create(ctx, virtualServer, meta.CreateOptions{})
+		_, err := client.K8sV1().
+			VirtualServers("ns1").
+			Create(ctx, virtualServer, meta.CreateOptions{})
 		if err != nil {
 			log.Warningf("Failed to Create VirtualServer Objects :%s", err)
 		}
@@ -327,7 +329,7 @@ var testHTTPRoutes = map[string]*gatewayapi_v1.HTTPRoute{
 			Namespace: "ns1",
 		},
 		Spec: gatewayapi_v1.HTTPRouteSpec{
-			//ParentRefs: []gatewayapi_v1.ParentRef{},
+			// ParentRefs: []gatewayapi_v1.ParentRef{},
 			Hostnames: []gatewayapi_v1.Hostname{"route-1.gw-1.example.com"},
 		},
 	},
@@ -340,7 +342,7 @@ var testTLSRoutes = map[string]*gatewayapi_v1alpha2.TLSRoute{
 			Namespace: "ns1",
 		},
 		Spec: gatewayapi_v1alpha2.TLSRouteSpec{
-			//ParentRefs: []gatewayapi_v1.ParentRef{},
+			// ParentRefs: []gatewayapi_v1.ParentRef{},
 			Hostnames: []gatewayapi_v1alpha2.Hostname{
 				"route-1.gw-1.example.com",
 			},
@@ -354,8 +356,8 @@ var testGRPCRoutes = map[string]*gatewayapi_v1alpha2.GRPCRoute{
 			Name:      "route-1",
 			Namespace: "ns1",
 		},
-		Spec: gatewayapi_v1alpha2.GRPCRouteSpec{
-			//ParentRefs: []gatewayapi_v1.ParentRef{},
+		Spec: gatewayapi_v1.GRPCRouteSpec{
+			// ParentRefs: []gatewayapi_v1.ParentRef{},
 			Hostnames: []gatewayapi_v1alpha2.Hostname{"route-1.gw-1.example.com"},
 		},
 	},

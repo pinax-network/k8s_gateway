@@ -43,7 +43,6 @@ func TestLookup(t *testing.T) {
 }
 
 func TestPlugin(t *testing.T) {
-
 	ctrl := &KubeController{hasSynced: true}
 
 	gw := newGateway()
@@ -79,7 +78,6 @@ func TestPlugin(t *testing.T) {
 }
 
 func TestPluginFallthrough(t *testing.T) {
-
 	ctrl := &KubeController{hasSynced: true}
 	gw := newGateway()
 	gw.Zones = []string{"example.com."}
@@ -97,10 +95,16 @@ func TestPluginFallthrough(t *testing.T) {
 		_, err := gw.ServeDNS(ctx, w, r)
 
 		if errors.As(err, &Fallen{}) && !tc.FallthroughExpected {
-			t.Fatalf("Test %d query resulted unexpectedly in a fall through instead of a response", i)
+			t.Fatalf(
+				"Test %d query resulted unexpectedly in a fall through instead of a response",
+				i,
+			)
 		}
 		if err == nil && tc.FallthroughExpected {
-			t.Fatalf("Test %d query resulted unexpectedly in a response instead of a fall through", i)
+			t.Fatalf(
+				"Test %d query resulted unexpectedly in a response instead of a fall through",
+				i,
+			)
 		}
 	}
 }
@@ -131,35 +135,45 @@ var tests = []test.Case{
 	{
 		Qname: "svcX.ns1.example.com.", Qtype: dns.TypeA, Rcode: dns.RcodeNameError,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	// Non-existing Ingress | Test 4
 	{
 		Qname: "d0main.example.com.", Qtype: dns.TypeA, Rcode: dns.RcodeNameError,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	// SOA for the existing domain | Test 5
 	{
 		Qname: "domain.example.com.", Qtype: dns.TypeSOA, Rcode: dns.RcodeSuccess,
 		Answer: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	// Service with no public addresses | Test 6
 	{
 		Qname: "svc3.ns1.example.com.", Qtype: dns.TypeA, Rcode: dns.RcodeNameError,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	// Real service, wrong query type | Test 7
 	{
 		Qname: "svc3.ns1.example.com.", Qtype: dns.TypeCNAME, Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	// Ingress FQDN == zone | Test 8
@@ -215,7 +229,9 @@ var tests = []test.Case{
 	{
 		Qname: "svc2.ns1.example.com.", Qtype: dns.TypeAAAA, Rcode: dns.RcodeSuccess,
 		Ns: []dns.RR{
-			test.SOA("example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5"),
+			test.SOA(
+				"example.com.	60	IN	SOA	dns1.kube-system.example.com. hostmaster.example.com. 1499347823 7200 1800 86400 5",
+			),
 		},
 	},
 	// Existing Service IPv6 | Test 16
@@ -266,15 +282,24 @@ var testsFallthrough = []FallthroughCase{
 }
 
 var testServiceIndexes = map[string][]netip.Addr{
-	"svc1.ns1":         {netip.MustParseAddr("192.0.1.1"), netip.MustParseAddr("fd12:3456:789a:1::")},
+	"svc1.ns1": {
+		netip.MustParseAddr("192.0.1.1"),
+		netip.MustParseAddr("fd12:3456:789a:1::"),
+	},
 	"svc2.ns1":         {netip.MustParseAddr("192.0.1.2")},
 	"svc3.ns1":         {},
 	"dns1.kube-system": {netip.MustParseAddr("192.0.1.53")},
 }
 
-func testServiceLookup(keys []string) (results []netip.Addr) {
+func testServiceLookup(keys []string) (results []interface{}) {
+	var addrs []netip.Addr
 	for _, key := range keys {
-		results = append(results, testServiceIndexes[strings.ToLower(key)]...)
+		addrs = append(addrs, testServiceIndexes[strings.ToLower(key)]...)
+	}
+
+	results = make([]interface{}, len(addrs))
+	for i, addr := range addrs {
+		results[i] = addr
 	}
 	return results
 }
@@ -287,9 +312,15 @@ var testIngressIndexes = map[string][]netip.Addr{
 	"shadow-vs.example.com": {netip.MustParseAddr("192.0.0.5")},
 }
 
-func testIngressLookup(keys []string) (results []netip.Addr) {
+func testIngressLookup(keys []string) (results []interface{}) {
+	var addrs []netip.Addr
 	for _, key := range keys {
-		results = append(results, testIngressIndexes[strings.ToLower(key)]...)
+		addrs = append(addrs, testIngressIndexes[strings.ToLower(key)]...)
+	}
+
+	results = make([]interface{}, len(addrs))
+	for i, addr := range addrs {
+		results[i] = addr
 	}
 	return results
 }
@@ -300,9 +331,16 @@ var testVirtualServerIndexes = map[string][]netip.Addr{
 	"shadow-vs.example.com": {netip.MustParseAddr("192.0.3.5")},
 }
 
-func testVirtualServerLookup(keys []string) (results []netip.Addr) {
+func testVirtualServerLookup(keys []string) (results []interface{}) {
+	var addrs []netip.Addr
+
 	for _, key := range keys {
-		results = append(results, testVirtualServerIndexes[strings.ToLower(key)]...)
+		addrs = append(addrs, testVirtualServerIndexes[strings.ToLower(key)]...)
+	}
+
+	results = make([]interface{}, len(addrs))
+	for i, addr := range addrs {
+		results[i] = addr
 	}
 	return results
 }
@@ -312,9 +350,15 @@ var testRouteIndexes = map[string][]netip.Addr{
 	"shadow.example.com":    {netip.MustParseAddr("192.0.2.4")},
 }
 
-func testRouteLookup(keys []string) (results []netip.Addr) {
+func testRouteLookup(keys []string) (results []interface{}) {
+	var addrs []netip.Addr
 	for _, key := range keys {
-		results = append(results, testRouteIndexes[strings.ToLower(key)]...)
+		addrs = append(addrs, testRouteIndexes[strings.ToLower(key)]...)
+	}
+
+	results = make([]interface{}, len(addrs))
+	for i, addr := range addrs {
+		results[i] = addr
 	}
 	return results
 }

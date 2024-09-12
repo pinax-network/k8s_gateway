@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	cm_v1 "github.com/cert-manager/cert-manager/pkg/apis/acme/v1"
+	k8s_cm "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned"
 	"github.com/miekg/dns"
 	nginx_v1 "github.com/nginxinc/kubernetes-ingress/pkg/apis/configuration/v1"
 	k8s_nginx "github.com/nginxinc/kubernetes-ingress/pkg/client/clientset/versioned"
@@ -25,9 +27,6 @@ import (
 	gatewayapi_v1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapi_v1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayClient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
-
-	cm_v1 "github.com/cert-manager/cert-manager/pkg/apis/acme/v1"
-	k8s_cm "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned"
 )
 
 const (
