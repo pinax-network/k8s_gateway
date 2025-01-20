@@ -735,8 +735,27 @@ func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
-			obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, strings.ToLower(key))
+			key := strings.ToLower(key)
+			// Ingress is not responsible for _acme-challenge.* FQDN
+			if strings.HasPrefix(key, "_acme-challenge.") {
+				continue
+			}
+
+			obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, key)
 			objs = append(objs, obj...)
+
+			log.Debugf("No exact matches found for %s, looking for wildcard ingress host", key)
+			for len(objs) == 0 {
+				_, after, found := strings.Cut(key, ".")
+				if !found {
+					// No more wildcard recursion
+					break
+				}
+				key = after
+				log.Debugf("Looking for *.%s", key)
+				obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, "*."+key)
+				objs = append(objs, obj...)
+			}
 		}
 		log.Debugf("Found %d matching Ingress objects", len(objs))
 		for _, obj := range objs {
