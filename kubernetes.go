@@ -744,7 +744,6 @@ func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 			obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, key)
 			objs = append(objs, obj...)
 
-			log.Debugf("No exact matches found for %s, looking for wildcard ingress host", key)
 			for len(objs) == 0 {
 				_, after, found := strings.Cut(key, ".")
 				if !found {
@@ -752,7 +751,6 @@ func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 					break
 				}
 				key = after
-				log.Debugf("Looking for *.%s", key)
 				obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, "*."+key)
 				objs = append(objs, obj...)
 			}
