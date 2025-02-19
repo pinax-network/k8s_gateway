@@ -21,6 +21,26 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  name: target-annotation-good
+  namespace: default
+  annotations:
+    "coredns.io/hostname": "target.ok"
+    "coredns.io/target": "redirect.here."
+spec:
+  ipFamilyPolicy: RequireDualStack
+  ports:
+    - name: 80-80
+      port: 80
+      protocol: TCP
+      targetPort: 80
+  selector:
+    app: backend
+  sessionAffinity: None
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
   name: annotation-bad
   namespace: default
   annotations:

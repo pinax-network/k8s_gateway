@@ -179,71 +179,65 @@ func (gw *Gateway) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 
 	var ipv4Addrs []netip.Addr
 	var ipv6Addrs []netip.Addr
+	var targetDomains []string
 	var acmeChallengeKeys []string
 
 	for _, obj := range objs {
 		switch v := obj.(type) {
 
 		case netip.Addr:
-
 			if v.Is4() {
 				ipv4Addrs = append(ipv4Addrs, v)
 			}
 			if v.Is6() {
 				ipv6Addrs = append(ipv6Addrs, v)
 			}
-
 		case string:
-
-			acmeChallengeKeys = append(acmeChallengeKeys, v)
-
+			if dns.IsFqdn(v) {
+				targetDomains = append(targetDomains, v)
+			} else {
+				acmeChallengeKeys = append(acmeChallengeKeys, v)
+			}
 		default:
-
 			log.Errorf("Unexpected type in results: %T", v)
 		}
 	}
 
 	switch state.QType() {
 	case dns.TypeA:
-
-		if len(ipv4Addrs) == 0 {
-
+		// Returning CNAME record
+		if len(targetDomains) != 0 {
+			m.Answer = gw.CNAME(state.Name(), targetDomains)
+		} else if len(ipv4Addrs) != 0 {
+			m.Answer = gw.A(state.Name(), ipv4Addrs)
+		} else {
 			if !isRootZoneQuery {
 				// No match, return NXDOMAIN
 				m.Rcode = dns.RcodeNameError
 			}
-
 			m.Ns = []dns.RR{gw.soa(state)}
-
-		} else {
-			m.Answer = gw.A(state.Name(), ipv4Addrs)
 		}
 	case dns.TypeAAAA:
-
-		if len(ipv6Addrs) == 0 {
-
+		// Returning CNAME record
+		if len(targetDomains) != 0 {
+			m.Answer = gw.CNAME(state.Name(), targetDomains)
+		} else if len(ipv6Addrs) != 0 {
+			m.Answer = gw.AAAA(state.Name(), ipv6Addrs)
+		} else {
 			if !isRootZoneQuery {
 				// No match, return NXDOMAIN
 				m.Rcode = dns.RcodeNameError
 			}
-
 			// as per rfc4074 #3
 			if len(ipv4Addrs) > 0 {
 				m.Rcode = dns.RcodeSuccess
 			}
-
 			m.Ns = []dns.RR{gw.soa(state)}
-
-		} else {
-			m.Answer = gw.AAAA(state.Name(), ipv6Addrs)
 		}
-
 	case dns.TypeSOA:
-
 		m.Answer = []dns.RR{gw.soa(state)}
 
 	case dns.TypeNS:
-
 		if isRootZoneQuery {
 			m.Answer = gw.nameservers(state)
 
@@ -255,7 +249,6 @@ func (gw *Gateway) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 		} else {
 			m.Ns = []dns.RR{gw.soa(state)}
 		}
-
 	case dns.TypeTXT:
 		if len(acmeChallengeKeys) == 0 {
 
@@ -330,6 +323,29 @@ func (gw *Gateway) AAAA(name string, results []netip.Addr) (records []dns.RR) {
 			)
 		}
 	}
+	return records
+}
+
+func (gw *Gateway) CNAME(name string, results []string) (records []dns.RR) {
+	dup := make(map[string]struct{})
+	for _, result := range results {
+		if _, ok := dup[result]; !ok {
+			dup[result] = struct{}{}
+			records = append(
+				records,
+				&dns.CNAME{
+					Hdr: dns.RR_Header{
+						Name:   name,
+						Rrtype: dns.TypeCNAME,
+						Class:  dns.ClassINET,
+						Ttl:    gw.ttlLow,
+					},
+					Target: result,
+				},
+			)
+		}
+	}
+
 	return records
 }
 

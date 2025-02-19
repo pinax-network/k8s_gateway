@@ -40,6 +40,7 @@ const (
 	challengeHostnameIndex           = "challengeHostname"
 	virtualServerHostnameIndex       = "virtualServerHostname"
 	hostnameAnnotationKey            = "coredns.io/hostname"
+	targetAnnotationKey              = "coredns.io/target"
 	externalDnsHostnameAnnotationKey = "external-dns.alpha.kubernetes.io/hostname"
 )
 
@@ -533,9 +534,9 @@ func serviceHostnameIndexFunc(obj interface{}) ([]string, error) {
 	}
 
 	hostname := service.Name + "." + service.Namespace
-	if annotation, exists := checkServiceAnnotation(hostnameAnnotationKey, service); exists {
+	if annotation, exists := checkServiceHostnameAnnotation(hostnameAnnotationKey, service); exists {
 		hostname = annotation
-	} else if annotation, exists := checkServiceAnnotation(externalDnsHostnameAnnotationKey, service); exists {
+	} else if annotation, exists := checkServiceHostnameAnnotation(externalDnsHostnameAnnotationKey, service); exists {
 		hostname = annotation
 	}
 
@@ -572,7 +573,7 @@ func challengeHostnameIndexFunc(obj interface{}) ([]string, error) {
 	return []string{host}, nil
 }
 
-func checkServiceAnnotation(annotation string, service *core.Service) (string, bool) {
+func checkServiceHostnameAnnotation(annotation string, service *core.Service) (string, bool) {
 	if annotationValue, exists := service.Annotations[annotation]; exists {
 		// checking the hostname length limits
 		if _, ok := dns.IsDomainName(annotationValue); ok {
@@ -584,6 +585,30 @@ func checkServiceAnnotation(annotation string, service *core.Service) (string, b
 			}
 		} else {
 			log.Infof("Invalid FQDN length: %s", annotationValue)
+		}
+	}
+
+	return "", false
+}
+
+func checkServiceTargetAnnotation(annotation string, service *core.Service) (string, bool) {
+	if annotationValue, exists := service.Annotations[annotation]; exists {
+		if dns.IsFqdn(annotationValue) {
+			return strings.ToLower(annotationValue), true
+		} else {
+			log.Infof("Invalid FQDN: %s", annotationValue)
+		}
+	}
+
+	return "", false
+}
+
+func checkIngressTargetAnnotation(annotation string, ingress *networking.Ingress) (string, bool) {
+	if annotationValue, exists := ingress.Annotations[annotation]; exists {
+		if dns.IsFqdn(annotationValue) {
+			return strings.ToLower(annotationValue), true
+		} else {
+			log.Infof("Invalid FQDN: %s", annotationValue)
 		}
 	}
 
@@ -611,6 +636,14 @@ func lookupServiceIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 		log.Debugf("Found %d matching Service objects", len(objs))
 		for _, obj := range objs {
 			service, _ := obj.(*core.Service)
+
+			// Check if we should return a CNAME record
+			if annotation, exists := checkServiceTargetAnnotation(targetAnnotationKey, service); exists {
+				log.Debugf("Service has coredns.io/target: %s", annotation)
+				result = append(result, annotation)
+				// in case target is defined, ignoring other fields completely
+				return
+			}
 
 			if len(service.Spec.ExternalIPs) > 0 {
 				for _, ip := range service.Spec.ExternalIPs {
@@ -759,11 +792,18 @@ func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 		for _, obj := range objs {
 			ingress, _ := obj.(*networking.Ingress)
 
+			// Check if we should return a CNAME record
+			if annotation, exists := checkIngressTargetAnnotation(targetAnnotationKey, ingress); exists {
+				result = append(result, annotation)
+				// in case target is defined, ignoring other fields completely
+				return
+			}
+
 			result = append(
 				result,
 				fetchIngressLoadBalancerIPs(ingress.Status.LoadBalancer.Ingress)...)
-		}
 
+		}
 		return
 	}
 }

@@ -2,6 +2,18 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  name: ingress-target
+  namespace: default
+  annotations:
+    coredns.io/target: redirect.here.
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ingress.target.foo.org
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
   name: ingress-myservicea
   namespace: default
 spec:
@@ -39,9 +51,9 @@ spec:
                 port:
                   number: 80
   tls:
-  - hosts:
-    - "*.myservice.foo.org"
-    secretName: ingress-wildcard-cert
+    - hosts:
+        - "*.myservice.foo.org"
+      secretName: ingress-wildcard-cert
 ---
 apiVersion: v1
 kind: Service
