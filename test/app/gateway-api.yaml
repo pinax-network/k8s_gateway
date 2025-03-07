@@ -5,7 +5,7 @@ metadata:
   name: gateway-one
   namespace: default
 spec:
-  gatewayClassName: istio
+  gatewayClassName: cilium
   listeners:
     - name: default
       hostname: "*.gw.foo.org"
@@ -21,7 +21,7 @@ metadata:
   name: gateway-two
   namespace: default
 spec:
-  gatewayClassName: istio
+  gatewayClassName: cilium
   listeners:
     - name: default
       hostname: "*.gw.foo.org"
@@ -79,7 +79,7 @@ spec:
   parentRefs:
     - name: gatewayWrong
       namespace: default
-  hostnames: ["myservicec.gw.foo.org"]
+  hostnames: ["myservicec.gw-wrong.foo.org"]
   rules:
     - matches:
         - path:
@@ -126,7 +126,7 @@ spec:
         - name: backend
           port: 443
 ---
-apiVersion: gateway.networking.k8s.io/v1alpha2
+apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
 metadata:
   name: myservicegrpc

@@ -2,22 +2,10 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: ingress-target
-  namespace: default
-  annotations:
-    coredns.io/target: redirect.here.
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: ingress.target.foo.org
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
   name: ingress-myservicea
   namespace: default
 spec:
-  ingressClassName: nginx
+  ingressClassName: cilium
   rules:
     - host: myservicea.foo.org
       http:
@@ -33,12 +21,29 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
+  name: ingress-nginx-test-b
+  namespace: default
+spec:
+  ingressClassName: nginxinc
+  rules:
+    - host: myserviceb.foo.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
   name: ingress-myservice-wildcard
   namespace: default
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-dns-01
 spec:
-  ingressClassName: nginx
+  ingressClassName: cilium
   rules:
     - host: "*.myservice.foo.org"
       http:
@@ -50,24 +55,16 @@ spec:
                 name: backend
                 port:
                   number: 80
-  tls:
-    - hosts:
-        - "*.myservice.foo.org"
-      secretName: ingress-wildcard-cert
 ---
-apiVersion: v1
-kind: Service
+# TODO: Should this be an ExternalName Service instead?
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  name: test
+  name: ingress-target
   namespace: default
+  annotations:
+    coredns.io/target: redirect.here.
 spec:
-  ipFamilyPolicy: RequireDualStack
-  ports:
-    - name: 80-80
-      port: 80
-      protocol: TCP
-      targetPort: 80
-  selector:
-    app: backend
-  sessionAffinity: None
-  type: LoadBalancer
+  ingressClassName: cilium
+  rules:
+    - host: ingress.target.foo.org

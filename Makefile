@@ -42,6 +42,10 @@ helm-update:
 test:
 	go test -race ./... -short
 
+.PHONY: test-kind-dns
+test-kind-dns:
+	./test/test-kind-dns.sh
+
 .PHONY: ci
 ci:
 	 golangci-lint run --timeout=5m0s

@@ -1,17 +1,18 @@
 allow_k8s_contexts('colima')
 allow_k8s_contexts('local')
 
-# using others with the makefile
 load('ext://restart_process', 'docker_build_with_restart')
-load('ext://helm_remote', 'helm_remote')
+load('ext://helm_resource', 'helm_resource', 'helm_repo')
 
+###############################################
+# Using local build of k8s-gateway helm chart #
+###############################################
 IMG = 'localhost:5000/coredns'
 
 def binary():
     return "CGO_ENABLED=0  GOOS=linux GOARCH=amd64 GO111MODULE=on go build cmd/coredns.go"
 
 local_resource('recompile', binary(), deps=['cmd', 'gateway.go', 'kubernetes.go', 'setup.go', 'apex.go'])
-
 
 docker_build_with_restart(IMG, '.',
     dockerfile='tilt.Dockerfile',
@@ -20,97 +21,72 @@ docker_build_with_restart(IMG, '.',
         sync('./coredns', '/coredns'),
         ]
 )
-
-# Cilium CNI
-helm_remote(
-    'cilium',
-    version="1.15.0",
-    namespace="kube-system",
-    repo_name='cilium',
-    values=['./test/cilium/helm-values.yaml'],
-    repo_url='https://helm.cilium.io'
-)
-
-# Create a local resource that waits for Cilium's deployment to be complete
-local_resource(
-    'cilium_wait',
-    cmd='echo "Waiting for Cilium..."',
-    resource_deps=['cilium'],
-    deps=['./test/cilium/helm-values.yaml']
-)
-
-local_resource(
-    'lb_crds',
-    cmd='kubectl apply -f ./test/cilium/dual-stack/crd-values.yaml',
-    resource_deps=['cilium_wait'],
-    deps=['./test/cilium/dual-stack/crd-values.yaml']
-)
-
-# Cert-manager
-helm_remote('cert-manager',
-            version="v1.15.3",
-            namespace="kube-system",
-            repo_name='jetstack',
-            set=['crds.enabled=true'],
-            repo_url='https://charts.jetstack.io')
-
-# helm_remote('cert-manager-webhook-pinax',
-#             version="0.1.0",
-#             namespace="kube-system",
-#             repo_name='oci://ghcr.io/pinax-network/charts',
-#             set=['certManager.namespace=kube-system'])
-#
-
 # CoreDNS with updated RBAC
 k8s_yaml(helm(
     './charts/k8s-gateway',
     namespace="kube-system",
     name='excoredns',
-    values=['./test/dual-stack/k8s-gateway-values.yaml'],
+    values=['./test/infra/k8s-gateway/k8s-gateway-values.yaml'],
     )
 )
+k8s_resource('excoredns-k8s-gateway', resource_deps=['gateway-api-crds'])
 
-# # Baremetal ingress controller (nodeport-based)
-helm_remote('ingress-nginx',
-            version="4.8.3",
-            repo_name='ingress-nginx',
-            set=['controller.admissionWebhooks.enabled=false'],
-            repo_url='https://kubernetes.github.io/ingress-nginx')
-#
-# # Nginxinc kubernetes-ingress
-# helm_remote('nginx-ingress',
-#             version="1.0.1",
-#             release_name="nginxinc",
-#             repo_name='oci://ghcr.io/nginxinc/charts',
-#             values=['./test/nginxinc-kubernetes-ingress/values.yaml']
-#             )
-# k8s_kind('VirtualServer', api_version='k8s.nginx.org/v1')
-#
-# helm_remote('istiod',
-#             version="1.19.3",
-#             repo_name='istio',
-#             set=['global.istioNamespace=default', 'base.enableIstioConfigCRDs=false', 'telemetry.enabled=false'],
-#             repo_url='https://istio-release.storage.googleapis.com/charts')
-# helm_remote('gateway',
-#             version="1.19.3",
-#             repo_name='istio',
-#             namespace='default',
-#             repo_url='https://istio-release.storage.googleapis.com/charts')
-#
+####################################################
+# Make sure the GatewayAPI CRDs are deployed first #
+####################################################
+local_resource(
+    'gateway-api-crds',
+    cmd='kubectl apply -f ./test/infra/gateway-api/crds.yml',
+    deps=['./test/infra/gateway-api/crds.yml']
+)
+k8s_kind('GatewayClass', api_version='gateway.networking.k8s.io/v1')
+k8s_kind('Gateway', api_version='gateway.networking.k8s.io/v1')
+k8s_kind('GRPCRoute', api_version='gateway.networking.k8s.io/v1')
+k8s_kind('HTTPRoute', api_version='gateway.networking.k8s.io/v1')
+k8s_kind('TLSRoute', api_version='gateway.networking.k8s.io/v1alpha2')
 
-# Backend deployment for testing
-k8s_yaml('./test/backend.yml')
+########################################
+# Cilium implements ingress/GatewayAPI #
+########################################
+helm_repo(
+    name="cilium-repo",
+    url="https://helm.cilium.io",
+)
+helm_resource(
+    name="cilium-install",
+    chart="cilium-repo/cilium",
+    namespace="kube-system",
+    flags=[
+        '--values=./test/infra/cilium/helm-values.yaml',
+        '--version=1.17.1',
+    ],
+    resource_deps=['gateway-api-crds', 'cilium-repo']
+)
 
-# # gateway-apis
-# k8s_yaml('./test/gateway-api/crds.yml')
-#
-# # Gateway API
-# k8s_kind('HTTPRoute', api_version='gateway.networking.k8s.io/v1')
-# k8s_kind('TLSRoute', api_version='gateway.networking.k8s.io/v1alpha2')
-# k8s_kind('GRPCRoute', api_version='gateway.networking.k8s.io/v1alpha2')
-# k8s_kind('Gateway', api_version='gateway.networking.k8s.io/v1')
-# k8s_yaml('./test/gateway-api/resources.yml')
-# k8s_yaml('./test/gatewayclasses.yaml')
-k8s_yaml('./test/dual-stack/service-annotation.yml')
-k8s_yaml('./test/dual-stack/ingress-services.yml')
-# k8s_yaml('./test/dual-stack/certificate.yaml')
+local_resource(
+    'cilium-lb',
+    cmd='kubectl apply -f ./test/infra/cilium/cilium-lb.yaml',
+    resource_deps=['cilium-install'],
+    deps=['./test/infra/cilium/cilium-lb.yaml']
+)
+
+#############################################
+# Nginxinc implements VirtualServer/Ingress #
+#############################################
+helm_resource(
+    name="nginxinc",
+    chart="oci://ghcr.io/nginxinc/charts/nginx-ingress",
+    namespace="kube-system",
+    flags=[
+        '--values=./test/infra/nginxinc-kubernetes-ingress/values.yaml',
+        '--version=2.0.0',
+    ],
+    resource_deps=['cilium-lb'],
+)
+k8s_kind('VirtualServer', api_version='k8s.nginx.org/v1')
+
+##################################
+# Backend deployment for testing #
+##################################
+k8s_yaml(kustomize('./test/app'))
+k8s_resource('virtualserver-nginx-test-a', resource_deps=['nginxinc'])
