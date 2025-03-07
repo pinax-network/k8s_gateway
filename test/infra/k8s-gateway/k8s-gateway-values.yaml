@@ -10,6 +10,7 @@ watchedResources:
   - GRPCRoute
   - Ingress
   - Service
+  - VirtualServer
   - Challenge
 
 # Delegated domain

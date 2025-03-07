@@ -100,7 +100,7 @@ spec:
       dnsPolicy: ClusterFirst
       containers:
         - name: "coredns"
-          image: "quay.io/oriedge/k8s_gateway"
+          image: "ghcr.io/pinax-network/k8s_gateway"
           imagePullPolicy: IfNotPresent
           args: ["-conf", "/etc/coredns/Corefile"]
           volumeMounts:
