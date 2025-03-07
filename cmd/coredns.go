@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 
-	_ "github.com/coredns/coredns/core/plugin"
-	_ "github.com/pinax-network/k8s_gateway"
-
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
+	_ "github.com/coredns/coredns/core/plugin"
 	"github.com/coredns/coredns/coremain"
+
+	_ "github.com/pinax-network/k8s_gateway"
 )
 
 var dropPlugins = map[string]bool{
@@ -16,7 +16,7 @@ var dropPlugins = map[string]bool{
 	"k8s_external": true,
 }
 
-const pluginVersion = "0.5.0"
+const pluginVersion = "0.8.0"
 
 func init() {
 	var directives []string

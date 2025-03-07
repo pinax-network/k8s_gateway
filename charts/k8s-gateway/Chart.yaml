@@ -2,8 +2,8 @@ apiVersion: v2
 name: k8s-gateway
 description: A fork of the k8s_gateway CoreDNS plugin with added functionalities
 type: application
-version: 3.2.0
-appVersion: 0.7.0
+version: 3.3.0
+appVersion: 0.8.0
 maintainers:
   - email: guillaume@pinax.network
     name: Guillaume
