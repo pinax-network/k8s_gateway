@@ -1,0 +1,88 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: challenge-issuer
+  namespace: default
+spec:
+  acme:
+    email: guillaume@pinax.network
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: example-issuer-account-key
+    solvers:
+      - dns01:
+          webhook:
+            groupName: acme.pinax.io
+            solverName: pinax-webhook-solver
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: challenge-myservicea
+  namespace: default
+spec:
+  secretName: challenge-myservicea-tls
+  privateKey:
+    algorithm: RSA
+    encoding: PKCS1
+    size: 2048
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d
+  isCA: false
+  usages:
+    - server auth
+    - client auth
+  subject:
+    organizations:
+      - cert-manager
+  dnsNames:
+    - challenge-myservicea.foo.org
+  issuerRef:
+    name: challenge-issuer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: challenge-myserviceb
+  namespace: default
+  annotations:
+    cert-manager.io/issuer: challenge-issuer
+spec:
+  rules:
+    - host: challenge-myserviceb.foo.org
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - challenge-myserviceb.foo.org
+      secretName: challenge-myserviceb-tls
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: challenge-gateway
+  namespace: default
+  annotations:
+    cert-manager.io/issuer: challenge-issuer
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: default
+      hostname: "challenge-myservicec.foo.org"
+      port: 80
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: challenge-myservicec-tls

@@ -9,3 +9,14 @@ spec:
     - name: nginx-test-a
       service: backend
       port: 80
+---
+apiVersion: k8s.nginx.org/v1
+kind: VirtualServer
+metadata:
+  name: virtualserver-nginx-test-b
+spec:
+  host: "*.virtualserverb.foo.org"
+  upstreams:
+    - name: nginx-test-b
+      service: backend
+      port: 80

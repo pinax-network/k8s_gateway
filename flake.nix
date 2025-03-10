@@ -15,7 +15,6 @@
           packages = with pkgs; [
             dig
             gnumake
-            k9s
             kubectl
             kubernetes-helm
             kind

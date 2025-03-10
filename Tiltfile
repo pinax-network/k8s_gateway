@@ -1,3 +1,5 @@
+update_settings ( max_parallel_updates = 5 , k8s_upsert_timeout_secs = 60 , suppress_unused_image_warnings = None )
+
 allow_k8s_contexts('colima')
 allow_k8s_contexts('local')
 
@@ -83,10 +85,49 @@ helm_resource(
     ],
     resource_deps=['cilium-lb'],
 )
-k8s_kind('VirtualServer', api_version='k8s.nginx.org/v1')
+
+######################################
+# Cert-manager implements Challenges #
+######################################
+helm_repo(
+    name="jetstack",
+    url="https://charts.jetstack.io",
+)
+helm_resource(
+    name="cert-manager",
+    chart="jetstack/cert-manager",
+    namespace="kube-system",
+    flags=[
+        '--values=./test/infra/cert-manager/values.yaml',
+        '--version=1.17.1',
+    ],
+    resource_deps=['jetstack', 'cilium-install']
+)
+helm_resource(
+    name="cert-manager-webhook",
+    chart="oci://ghcr.io/pinax-network/charts/cert-manager-webhook-pinax",
+    namespace="kube-system",
+    flags=[
+        '--version=0.1.0',
+        '--set=certManager.namespace=kube-system',
+    ],
+    resource_deps=['cert-manager'],
+)
 
 ##################################
 # Backend deployment for testing #
 ##################################
-k8s_yaml(kustomize('./test/app'))
-k8s_resource('virtualserver-nginx-test-a', resource_deps=['nginxinc'])
+local_resource(
+    'test-app',
+    cmd='kubectl apply -k ./test/app',
+    resource_deps=['cilium-lb', 'excoredns-k8s-gateway', 'cert-manager-webhook', 'nginxinc'],
+    deps=[
+        './test/app/kustomization.yaml',
+        './test/app/backend.yml',
+        './test/app/ingress.yaml',
+        './test/app/service.yaml',
+        './test/app/challenge.yaml',
+        './test/app/gateway-api.yaml',
+        './test/app/virtual-server.yaml',
+    ]
+)

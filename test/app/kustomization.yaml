@@ -10,3 +10,4 @@ resources:
   - ./ingress.yaml
   - ./gateway-api.yaml
   - ./virtual-server.yaml
+  - ./challenge.yaml
