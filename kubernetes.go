@@ -574,12 +574,19 @@ func challengeHostnameIndexFunc(obj interface{}) ([]string, error) {
 }
 
 func checkServiceHostnameAnnotation(annotation string, service *core.Service) (string, bool) {
+	var res string
+
 	if annotationValue, exists := service.Annotations[annotation]; exists {
+		// Looking for wildcard hostname
+		if strings.HasPrefix(annotationValue, "*.") {
+			res = "*."
+			annotationValue = strings.TrimPrefix(annotationValue, "*.")
+		}
 		// checking the hostname length limits
 		if _, ok := dns.IsDomainName(annotationValue); ok {
 			// checking RFC 1123 conformance (same as metadata labels)
 			if valid := isdns1123Hostname(annotationValue); valid {
-				return strings.ToLower(annotationValue), true
+				return res + strings.ToLower(annotationValue), true
 			} else {
 				log.Infof("RFC 1123 conformance failed for FQDN: %s", annotationValue)
 			}
@@ -630,8 +637,21 @@ func lookupServiceIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
-			obj, _ := ctrl.GetIndexer().ByIndex(serviceHostnameIndex, strings.ToLower(key))
+			key := strings.ToLower(key)
+
+			obj, _ := ctrl.GetIndexer().ByIndex(serviceHostnameIndex, key)
 			objs = append(objs, obj...)
+
+			for len(objs) == 0 {
+				_, after, found := strings.Cut(key, ".")
+				if !found {
+					// No more wildcard recursion
+					break
+				}
+				key = after
+				obj, _ := ctrl.GetIndexer().ByIndex(serviceHostnameIndex, "*."+key)
+				objs = append(objs, obj...)
+			}
 		}
 		log.Debugf("Found %d matching Service objects", len(objs))
 		for _, obj := range objs {
@@ -665,8 +685,21 @@ func lookupVirtualServerIndex(ctrl cache.SharedIndexInformer) func([]string) []i
 	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
-			obj, _ := ctrl.GetIndexer().ByIndex(virtualServerHostnameIndex, strings.ToLower(key))
+			key := strings.ToLower(key)
+
+			obj, _ := ctrl.GetIndexer().ByIndex(virtualServerHostnameIndex, key)
 			objs = append(objs, obj...)
+
+			for len(objs) == 0 {
+				_, after, found := strings.Cut(key, ".")
+				if !found {
+					// No more wildcard recursion
+					break
+				}
+				key = after
+				obj, _ := ctrl.GetIndexer().ByIndex(virtualServerHostnameIndex, "*."+key)
+				objs = append(objs, obj...)
+			}
 		}
 		log.Debugf("Found %d matching VirtualServer objects", len(objs))
 		for _, obj := range objs {
@@ -688,8 +721,21 @@ func lookupHttpRouteIndex(http, gw cache.SharedIndexInformer) func([]string) []i
 	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
-			obj, _ := http.GetIndexer().ByIndex(httpRouteHostnameIndex, strings.ToLower(key))
+			key := strings.ToLower(key)
+
+			obj, _ := http.GetIndexer().ByIndex(httpRouteHostnameIndex, key)
 			objs = append(objs, obj...)
+
+			for len(objs) == 0 {
+				_, after, found := strings.Cut(key, ".")
+				if !found {
+					// No more wildcard recursion
+					break
+				}
+				key = after
+				obj, _ := http.GetIndexer().ByIndex(httpRouteHostnameIndex, "*."+key)
+				objs = append(objs, obj...)
+			}
 		}
 		log.Debugf("Found %d matching httpRoute objects", len(objs))
 
@@ -707,8 +753,21 @@ func lookupTLSRouteIndex(tls, gw cache.SharedIndexInformer) func([]string) []int
 	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
-			obj, _ := tls.GetIndexer().ByIndex(tlsRouteHostnameIndex, strings.ToLower(key))
+			key := strings.ToLower(key)
+
+			obj, _ := tls.GetIndexer().ByIndex(tlsRouteHostnameIndex, key)
 			objs = append(objs, obj...)
+
+			for len(objs) == 0 {
+				_, after, found := strings.Cut(key, ".")
+				if !found {
+					// No more wildcard recursion
+					break
+				}
+				key = after
+				obj, _ := tls.GetIndexer().ByIndex(tlsRouteHostnameIndex, "*."+key)
+				objs = append(objs, obj...)
+			}
 		}
 		log.Debugf("Found %d matching tlsRoute objects", len(objs))
 
@@ -726,8 +785,21 @@ func lookupGRPCRouteIndex(grpc, gw cache.SharedIndexInformer) func([]string) []i
 	return func(indexKeys []string) (result []interface{}) {
 		var objs []interface{}
 		for _, key := range indexKeys {
-			obj, _ := grpc.GetIndexer().ByIndex(grpcRouteHostnameIndex, strings.ToLower(key))
+			key := strings.ToLower(key)
+
+			obj, _ := grpc.GetIndexer().ByIndex(grpcRouteHostnameIndex, key)
 			objs = append(objs, obj...)
+
+			for len(objs) == 0 {
+				_, after, found := strings.Cut(key, ".")
+				if !found {
+					// No more wildcard recursion
+					break
+				}
+				key = after
+				obj, _ := grpc.GetIndexer().ByIndex(grpcRouteHostnameIndex, "*."+key)
+				objs = append(objs, obj...)
+			}
 		}
 		log.Debugf("Found %d matching grpcRoute objects", len(objs))
 
@@ -741,11 +813,7 @@ func lookupGRPCRouteIndex(grpc, gw cache.SharedIndexInformer) func([]string) []i
 	}
 }
 
-func lookupGateways(
-	gw cache.SharedIndexInformer,
-	refs []gatewayapi_v1.ParentReference,
-	ns string,
-) (result []interface{}) {
+func lookupGateways(gw cache.SharedIndexInformer, refs []gatewayapi_v1.ParentReference, ns string) (result []interface{}) {
 	for _, gwRef := range refs {
 
 		if gwRef.Namespace != nil {
@@ -769,10 +837,6 @@ func lookupIngressIndex(ctrl cache.SharedIndexInformer) func([]string) []interfa
 		var objs []interface{}
 		for _, key := range indexKeys {
 			key := strings.ToLower(key)
-			// Ingress is not responsible for _acme-challenge.* FQDN
-			if strings.HasPrefix(key, "_acme-challenge.") {
-				continue
-			}
 
 			obj, _ := ctrl.GetIndexer().ByIndex(ingressHostnameIndex, key)
 			objs = append(objs, obj...)
@@ -881,9 +945,7 @@ func fetchServiceLoadBalancerIPs(ingresses []core.LoadBalancerIngress) (results 
 	return
 }
 
-func fetchIngressLoadBalancerIPs(
-	ingresses []networking.IngressLoadBalancerIngress,
-) (results []interface{}) {
+func fetchIngressLoadBalancerIPs(ingresses []networking.IngressLoadBalancerIngress) (results []interface{}) {
 	for _, address := range ingresses {
 		if address.Hostname != "" {
 			log.Debugf("Looking up hostname %s", address.Hostname)
