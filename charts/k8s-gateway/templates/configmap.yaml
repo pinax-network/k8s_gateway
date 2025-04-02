@@ -28,7 +28,7 @@ data:
           secondary {{ .Values.secondary }}
           {{- end }}
           {{- if .Values.watchedResources }}
-          resources {{ join " " .Values.watchedResources }}{{ if .Values.dnsChallenge.k8s_gateway.enabled }} Challenge{{ end }}
+          resources {{ if .Values.dnsChallenge.k8s_gateway.enabled }}Challenge {{ end }}{{ join " " .Values.watchedResources }}
           {{- end }}
           {{- if .Values.fallthrough.enabled }}
           fallthrough {{- range .Values.fallthrough.zones }} {{ . }} {{- end }}
