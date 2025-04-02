@@ -1,0 +1,32 @@
+name: helm
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - charts/k8s-gateway/Chart.yaml
+
+jobs:
+  helm:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log in to the Container registry
+        env:
+          USERNAME: ${{ github.actor }}
+          PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          helm registry login -u $USERNAME -p $PASSWORD ghcr.io
+
+      - name: Push the chart
+        run: |
+          make helm-update

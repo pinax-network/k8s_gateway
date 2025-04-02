@@ -7,6 +7,7 @@ ARCHS := "linux/amd64,linux/arm64,linux/mips64"
 
 # Where to push the docker image.
 REGISTRY ?= ghcr.io/pinax-network
+VERSION := $(shell yq -r '.version' charts/k8s-gateway/Chart.yaml)
 
 
 # Image URL to use all building/pushing image targets
@@ -31,12 +32,9 @@ build:
 
 ## Generate new helm package and update chart yaml file
 helm-update:
-	helm package charts/k8s-gateway -d charts.tmp/charts
-	helm repo index --url https://ori-edge.github.io/k8s_gateway/ --merge index.yaml charts.tmp/
-	mv charts.tmp/charts/* charts/
-	mv charts.tmp/index.yaml .
-	rmdir charts.tmp/charts
-	rmdir charts.tmp
+	helm package charts/k8s-gateway -d charts/
+	helm push ./charts/k8s-gateway-$(VERSION).tgz oci://${REGISTRY}/charts
+	rm charts/k8s-gateway-$(VERSION).tgz
 
 .PHONY: test
 test:

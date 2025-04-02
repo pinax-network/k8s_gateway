@@ -56,43 +56,24 @@ jobs:
         run: |
           make release
 
-  helm-oci-release:
+  helm-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
       packages: write
-    outputs:
-      chart-digest: ${{ steps.helm_publish.outputs.digest }}
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Extract the version from Chart.yaml
-      - name: Extract chart version
-        uses: mikefarah/yq@v4
-        id: chart_version
-        with:
-          cmd: |
-            VERSION=$(yq '.version' charts/k8s-gateway/Chart.yaml)
-            echo "version=$(echo $VERSION)" >> $GITHUB_OUTPUT
+      - name: Log in to the Container registry
+        env:
+          USERNAME: ${{ github.actor }}
+          PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          helm registry login -u $USERNAME -p $PASSWORD oci://ghcr.io
 
-      - name: Extract appVersion
-        id: app_version
-        run: echo "appVersion=$(echo ${GITHUB_REF##*/})" >> $GITHUB_OUTPUT
-
-      - name: Helm | Publish
-        id: helm_publish
-        uses: peak-scale/github-actions/helm-oci-chart@38322faabccd75abfa581c435e367d446b6d2c3b # v0.1.0
-        with:
-          registry: ghcr.io
-          repository: ${{ github.repository_owner }}/charts
-          name: "k8s-gateway"
-          version: ${{ steps.chart_version.outputs.version }}
-          app-version: ${{ steps.app_version.outputs.appVersion }}
-          registry-username: ${{ github.actor }}
-          registry-password: ${{ secrets.GITHUB_TOKEN }}
-          update-dependencies: "true" # Defaults to false
-
+      - name: Push the chart
+        run: |
+          make helm-update
