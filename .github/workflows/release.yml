@@ -72,7 +72,7 @@ jobs:
           USERNAME: ${{ github.actor }}
           PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          helm registry login -u $USERNAME -p $PASSWORD oci://ghcr.io
+          helm registry login -u $USERNAME -p $PASSWORD ghcr.io
 
       - name: Push the chart
         run: |
