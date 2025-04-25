@@ -140,7 +140,7 @@ func (gw *Gateway) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.Ms
 		// TODO maybe there's a better way to do this? e.g. return an error back to the client?
 		return dns.RcodeServerFailure, plugin.Error(
 			thisPlugin,
-			fmt.Errorf("Could not sync required resources"),
+			fmt.Errorf("could not sync required resources"),
 		)
 	}
 
