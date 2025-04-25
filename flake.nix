@@ -14,6 +14,7 @@
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             dig
+            go_1_24
             gnumake
             kubectl
             kubernetes-helm
