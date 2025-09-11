@@ -48,7 +48,6 @@ spec:
       backendRefs:
         - name: backend
           port: 80
-
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -68,7 +67,6 @@ spec:
       backendRefs:
         - name: backend
           port: 80
-
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -108,6 +106,18 @@ spec:
         - name: backend
           port: 80
 ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: myservice-cname
+  namespace: default
+  annotations:
+    coredns.io/target: redirect.here.
+spec:
+  parentRefs:
+    - name: gateway-one
+  hostnames: ["myservice-cname.gw.foo.org"]
+---
 apiVersion: gateway.networking.k8s.io/v1alpha2
 kind: TLSRoute
 metadata:
@@ -135,6 +145,18 @@ spec:
     - backendRefs:
         - name: backend
           port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: myservicegrpc-cname
+  namespace: default
+  annotations:
+    coredns.io/target: redirect.here.
+spec:
+  parentRefs:
+    - name: gateway-one
+  hostnames: ["myservicegrpc-cname.gw.foo.org"]
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

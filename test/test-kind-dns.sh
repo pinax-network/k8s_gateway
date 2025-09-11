@@ -26,8 +26,10 @@ myservicea.gw true
 myserviceb.gw true
 myservicec.gw-wrong false
 myserviced.gw true
+myservice-cname.gw true
 myservicetls.gw true
 myservicegrpc.gw true
+myservicegrpc-cname.gw true
 *.http-wildcard.gw true
 asdf.http-wildcard.gw true
 *.tls-wildcard.gw true
