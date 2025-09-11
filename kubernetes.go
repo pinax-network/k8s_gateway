@@ -622,6 +622,30 @@ func checkIngressTargetAnnotation(annotation string, ingress *networking.Ingress
 	return "", false
 }
 
+func checkHTTPRouteTargetAnnotation(annotation string, httpRoute *gatewayapi_v1.HTTPRoute) (string, bool) {
+	if annotationValue, exists := httpRoute.Annotations[annotation]; exists {
+		if dns.IsFqdn(annotationValue) {
+			return strings.ToLower(annotationValue), true
+		} else {
+			log.Infof("Invalid FQDN: %s", annotationValue)
+		}
+	}
+
+	return "", false
+}
+
+func checkGRPCRouteTargetAnnotation(annotation string, grpcRoute *gatewayapi_v1.GRPCRoute) (string, bool) {
+	if annotationValue, exists := grpcRoute.Annotations[annotation]; exists {
+		if dns.IsFqdn(annotationValue) {
+			return strings.ToLower(annotationValue), true
+		} else {
+			log.Infof("Invalid FQDN: %s", annotationValue)
+		}
+	}
+
+	return "", false
+}
+
 func virtualServerHostnameIndexFunc(obj interface{}) ([]string, error) {
 	virtualServer, ok := obj.(*nginx_v1.VirtualServer)
 	if !ok {
@@ -741,6 +765,14 @@ func lookupHttpRouteIndex(http, gw cache.SharedIndexInformer) func([]string) []i
 
 		for _, obj := range objs {
 			httpRoute, _ := obj.(*gatewayapi_v1.HTTPRoute)
+
+			// Check if we should return a CNAME record
+			if annotation, exists := checkHTTPRouteTargetAnnotation(targetAnnotationKey, httpRoute); exists {
+				result = append(result, annotation)
+				// in case target is defined, ignoring other fields completely
+				return
+			}
+
 			result = append(
 				result,
 				lookupGateways(gw, httpRoute.Spec.ParentRefs, httpRoute.Namespace)...)
@@ -805,6 +837,13 @@ func lookupGRPCRouteIndex(grpc, gw cache.SharedIndexInformer) func([]string) []i
 
 		for _, obj := range objs {
 			grpcRoute, _ := obj.(*gatewayapi_v1.GRPCRoute)
+
+			// Check if we should return a CNAME record
+			if annotation, exists := checkGRPCRouteTargetAnnotation(targetAnnotationKey, grpcRoute); exists {
+				result = append(result, annotation)
+				// in case target is defined, ignoring other fields completely
+				return
+			}
 			result = append(
 				result,
 				lookupGateways(gw, grpcRoute.Spec.ParentRefs, grpcRoute.Namespace)...)
